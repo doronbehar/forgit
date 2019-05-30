@@ -1,8 +1,8 @@
 # MIT (c) Wenxuan Zhang
 
-forgit::warn() { printf "%b[Warn]%b %s\n" '\e[0;33m' '\e[0m' "$@" >&2; }
-forgit::info() { printf "%b[Info]%b %s\n" '\e[0;32m' '\e[0m' "$@" >&2; }
-forgit::inside_work_tree() { git rev-parse --is-inside-work-tree >/dev/null; }
+__forgit_warn() { printf "%b[Warn]%b %s\n" '\e[0;33m' '\e[0m' "$@" >&2; }
+__forgit_info() { printf "%b[Info]%b %s\n" '\e[0;32m' '\e[0m' "$@" >&2; }
+__forgit_inside_work_tree() { git rev-parse --is-inside-work-tree >/dev/null; }
 
 # https://github.com/so-fancy/diff-so-fancy
 hash diff-so-fancy &>/dev/null && forgit_fancy='|diff-so-fancy'
@@ -10,8 +10,8 @@ hash diff-so-fancy &>/dev/null && forgit_fancy='|diff-so-fancy'
 hash emojify &>/dev/null && forgit_emojify='|emojify'
 
 # git commit viewer
-forgit::log() {
-    forgit::inside_work_tree || return 1
+__forgit_log() {
+    __forgit_inside_work_tree || return 1
     local cmd opts
     cmd="echo {} |grep -Eo '[a-f0-9]+' |head -1 |xargs -I% git show --color=always % $* $forgit_emojify $forgit_fancy"
     opts="
@@ -26,8 +26,8 @@ forgit::log() {
 }
 
 # git diff viewer
-forgit::diff() {
-    forgit::inside_work_tree || return 1
+__forgit_diff() {
+    __forgit_inside_work_tree || return 1
     local cmd files opts
     cmd="git diff --color=always -- {} $forgit_emojify $forgit_fancy"
     files="$*"
@@ -43,8 +43,8 @@ forgit::diff() {
 }
 
 # git add selector
-forgit::add() {
-    forgit::inside_work_tree || return 1
+__forgit_add() {
+    __forgit_inside_work_tree || return 1
     local changed unmerged untracked files opts
     changed=$(git config --get-color color.status.changed red)
     unmerged=$(git config --get-color color.status.unmerged red)
@@ -66,8 +66,8 @@ forgit::add() {
 }
 
 # git checkout-restore selector
-forgit::restore() {
-    forgit::inside_work_tree || return 1
+__forgit_restore() {
+    __forgit_inside_work_tree || return 1
     local cmd files opts
     cmd="git diff --color=always -- {} $forgit_emojify $forgit_fancy"
     opts="
@@ -81,8 +81,8 @@ forgit::restore() {
 }
 
 # git stash viewer
-forgit::stash::show() {
-    forgit::inside_work_tree || return 1
+__forgit_stash_show() {
+    __forgit_inside_work_tree || return 1
     local cmd opts
     cmd="git stash show \$(echo {}| cut -d: -f1) --color=always --ext-diff $forgit_fancy"
     opts="
@@ -94,8 +94,8 @@ forgit::stash::show() {
 }
 
 # git clean selector
-forgit::clean() {
-    forgit::inside_work_tree || return 1
+__forgit_clean() {
+    __forgit_inside_work_tree || return 1
     local files opts
     opts="
         $FORGIT_FZF_DEFAULT_OPTS
@@ -113,8 +113,8 @@ export FORGIT_GI_REPO_REMOTE=${FORGIT_GI_REPO_REMOTE:-https://github.com/dvcs/gi
 export FORGIT_GI_REPO_LOCAL=${FORGIT_GI_REPO_LOCAL:-~/.forgit/gi/repos/dvcs/gitignore}
 export FORGIT_GI_TEMPLATES=${FORGIT_GI_TEMPLATES:-$FORGIT_GI_REPO_LOCAL/templates}
 
-forgit::ignore() {
-    [ -d "$FORGIT_GI_REPO_LOCAL" ] || forgit::ignore::update
+__forgit_ignore() {
+    [ -d "$FORGIT_GI_REPO_LOCAL" ] || __forgit_ignore_update
     local IFS cmd args cat opts
     # https://github.com/sharkdp/bat.git
     hash bat &>/dev/null && cat='bat -l gitignore --color=always' || cat="cat"
@@ -125,39 +125,39 @@ forgit::ignore() {
         $FORGIT_IGNORE_FZF_OPTS
     "
     # shellcheck disable=SC2206,2207
-    IFS=$'\n' args=($@) && [[ $# -eq 0 ]] && args=($(forgit::ignore::list | nl -nrn -w4 -s'  ' |
+    IFS=$'\n' args=($@) && [[ $# -eq 0 ]] && args=($(__forgit_ignore_list | nl -nrn -w4 -s'  ' |
         FZF_DEFAULT_OPTS="$opts" fzf  |awk '{print $2}'))
     [ ${#args[@]} -eq 0 ] && return 1
     # shellcheck disable=SC2068
     if hash bat &>/dev/null; then
-        forgit::ignore::get ${args[@]} | bat -l gitignore
+        __forgit_ignore_get ${args[@]} | bat -l gitignore
     else
-        forgit::ignore::get ${args[@]}
+        __forgit_ignore_get ${args[@]}
     fi
 }
-forgit::ignore::update() {
+__forgit_ignore_update() {
     if [[ -d "$FORGIT_GI_REPO_LOCAL" ]]; then
-        forgit::info 'Updating gitignore repo...'
+        __forgit_info 'Updating gitignore repo...'
         (cd "$FORGIT_GI_REPO_LOCAL" && git pull --no-rebase --ff) || return 1
     else
-        forgit::info 'Initializing gitignore repo...'
+        __forgit_info 'Initializing gitignore repo...'
         git clone --depth=1 "$FORGIT_GI_REPO_REMOTE" "$FORGIT_GI_REPO_LOCAL"
     fi
 }
-forgit::ignore::get() {
+__forgit_ignore_get() {
     local item filename header
     for item in "$@"; do
         if filename=$(find -L "$FORGIT_GI_TEMPLATES" -type f \( -iname "${item}.gitignore" -o -iname "${item}" \) -print -quit); then
-            [[ -z "$filename" ]] && forgit::warn "No gitignore template found for '$item'." && continue
+            [[ -z "$filename" ]] && __forgit_warn "No gitignore template found for '$item'." && continue
             header="${filename##*/}" && header="${header%.gitignore}"
             echo "### $header" && cat "$filename" && echo
         fi
     done
 }
-forgit::ignore::list() {
+__forgit_ignore_list() {
     find "$FORGIT_GI_TEMPLATES" -print |sed -e 's#.gitignore$##' -e 's#.*/##' | sort -fu
 }
-forgit::ignore::clean() {
+__forgit_ignore_clean() {
     setopt localoptions rmstarsilent
     [[ -d "$FORGIT_GI_REPO_LOCAL" ]] && rm -rf "$FORGIT_GI_REPO_LOCAL"
 }
@@ -179,11 +179,11 @@ $FORGIT_FZF_DEFAULT_OPTS
 # register aliases
 # shellcheck disable=SC2139
 if [[ -z "$FORGIT_NO_ALIASES" ]]; then
-    alias "${forgit_add:-ga}"='forgit::add'
-    alias "${forgit_log:-glo}"='forgit::log'
-    alias "${forgit_diff:-gd}"='forgit::diff'
-    alias "${forgit_ignore:-gi}"='forgit::ignore'
-    alias "${forgit_restore:-gcf}"='forgit::restore'
-    alias "${forgit_clean:-gclean}"='forgit::clean'
-    alias "${forgit_stash_show:-gss}"='forgit::stash::show'
+    alias "${forgit_add:-ga}"='__forgit_add'
+    alias "${forgit_log:-glo}"='__forgit_log'
+    alias "${forgit_diff:-gd}"='__forgit_diff'
+    alias "${forgit_ignore:-gi}"='__forgit_ignore'
+    alias "${forgit_restore:-gcf}"='__forgit_restore'
+    alias "${forgit_clean:-gclean}"='__forgit_clean'
+    alias "${forgit_stash_show:-gss}"='__forgit_stash_show'
 fi
